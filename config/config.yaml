@@ -1,0 +1,13 @@
+manifest: config/manifest.tab
+thresholds:
+  tada: 0.8
+  strv: 0.75
+  cadd: 15
+anno:
+ window: 2500
+ hg38:
+  ncbi_refseq: '/path/to/annotations/hg38_NCBI.bgp.gz'
+cadd_config:
+ snakefile: '/path/to/cadd-sv/snakefile'
+ dataset:
+  - sample_p1
