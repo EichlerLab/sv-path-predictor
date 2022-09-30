@@ -2,7 +2,7 @@
 A Snakemake pipeline to predict structural variant pathogenicity and outputs a compound score calculated from three different predictors. It uses [CADD-SV](https://github.com/kircherlab/CADD-SV), [TADA](https://github.com/jakob-he/TADA), and [StrVCTVRE](https://github.com/andrewSharo/StrVCTVRE/).
 
 # Pipeline overview
-Dag is to be inserted here.
+![pipeline vector](https://github.com/EichlerLab/sv-path-predictor/blob/main/workflow.svg)
 
 # Getting started
 1. Install Snakemake version >= 6.7.0
@@ -13,5 +13,5 @@ Dag is to be inserted here.
       2. ``ln -s /path/to/softwares/pipelines/CADD-SV/models/ .``
 4. If the dry run `-np` looks good, start your analysis
     ```console
-    snakemake -s sv_path.smk --keep-going --printshellcmds --use-envmodules --use-conda
+    snakemake -s sv_path.smk --printshellcmds --use-envmodules --use-conda
     ```
