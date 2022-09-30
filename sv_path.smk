@@ -123,7 +123,7 @@ rule append_cadd_output:
 		# fix header
 		with open(input.bed) as file:
 			data = file.read()
-		data[:data.index('\n')] = data[:data.index('\n')].replace(' ','\t')
+		data = data[:data.index('\n')].replace(' ','\t') + data[data.index('\n'):]
 		stream_data = StringIO(data)
 
 		cadd = pd.read_csv(stream_data,sep='\t',index_col=False)
@@ -271,5 +271,4 @@ rule annotate_sv:
 		bed.to_csv(output.scored_and_annotated, sep='\t', index=False)
 
 onsuccess:
-	# shell("find . -maxdepth 2 -type l | xargs rm")
-	shell("rm -rf input/ beds/ output/")
+	shell("rm -rf input/")
