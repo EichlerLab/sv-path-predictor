@@ -1,4 +1,5 @@
 import pandas as pd
+import pandas.errors
 import numpy as np
 import os
 from pybedtools import BedTool
@@ -67,7 +68,7 @@ rule convert_tab:
 		mem = 8,
 		hrs = 24
 	run:
-		df = pd.read_csv(input.tab, sep='\t', header=None, names=['#CHROM', 'POS', 'REF', 'ALT', 'SVLEN', 'SVTYPE'])
+		df = pd.read_csv(input.tab, sep='\t', header=None, keep_default_na=False, names=['#CHROM', 'POS', 'REF', 'ALT', 'SVLEN', 'SVTYPE'])
 		df['SVLEN'] = df.apply(lambda row: len(row['ALT']) - len(row['REF']), axis=1)
 		df['SVLEN'] = np.abs(df['SVLEN'])
 		df['END'] = df.apply(lambda row: row['POS']+row['SVLEN'] if row['SVTYPE'] != 'INS' else row['POS']+1, axis=1)
@@ -182,6 +183,7 @@ rule strvctvre:
 	input:
 		bed = expand('results/{{sample}}/sv_{svtype}.bed', svtype=['DEL','DUP'])
 	output:
+		temp_input = temp('results/{sample}/strvctvre/temp_input.bed'),
 		annotated = 'results/{sample}/strvctvre/strvctvre_annotated-{sample}.bed'
 	threads: 1
 	resources:
@@ -196,14 +198,11 @@ rule strvctvre:
 		'strvctvre/1.7'
 	shell:
 		'''
-		cat {input.bed} > temp_input.bed
-		ln -s $STRVRE_DATA .
+		cat {input.bed} > {output.temp_input}
 		StrVCTVRE.py -i temp_input.bed -o {output.annotated} -f bed && \
 		sed -ibackup '1 i\CHR\tSTART\tEND\tSVTYPE\tID\tSCORE' {output.annotated}
 		cat {output.annotated} | grep -v 'not' > {output.annotated}backup
 		mv {output.annotated}backup {output.annotated}
-		rm $( basename $STRVRE_DATA )
-		rm temp_input.bed
 		'''
 
 rule combine_scores:
@@ -222,16 +221,27 @@ rule combine_scores:
 		mem = 8,
 		hrs = 24
 	run:
-		cadd_df = pd.read_csv(input.cadd, sep='\t', usecols=['CADDSV-score','ID'], index_col='ID')
-		tada_df = pd.read_csv(input.tada, sep='\t', usecols=['Pathogenicity Score','Pathogenicity Label','ID'], index_col='ID')
-		strv_df = pd.read_csv(input.strv, sep='\t', usecols=['SCORE','ID'], index_col='ID')
+		try:
+			cadd_df = pd.read_csv(input.cadd, sep='\t', usecols=['CADDSV-score','ID'], index_col='ID')
+			cadd_df['CADDSV-score'] = cadd_df.apply(lambda row: 1 if (row['CADDSV-score'] >= float(params.c_cutoff)) else 0,axis=1)
+			cadd_df = cadd_df[~cadd_df.index.duplicated(keep='first')]
+		except pandas.errors.EmptyDataError:
+			tada_df = pd.DataFrame(columns=['CADDSV-score','ID'], index=['ID'])
+			print(f'Note: {input.cadd} was empty. Skipping.')
 
-		cadd_df['CADDSV-score'] = cadd_df.apply(lambda row: 1 if (row['CADDSV-score'] >= float(params.c_cutoff)) else 0, axis=1)
-		cadd_df = cadd_df[~cadd_df.index.duplicated(keep='first')]
+		try:
+			tada_df = pd.read_csv(input.tada, sep='\t', usecols=['Pathogenicity Score','Pathogenicity Label','ID'], index_col='ID')
+			tada_df['Pathogenicity Score'] = tada_df.apply(lambda row: 1 if (row['Pathogenicity Score'] >= float(params.t_cutoff) and row['Pathogenicity Label'] == 1) else 0,axis=1)
+		except pandas.errors.EmptyDataError:
+			tada_df = pd.DataFrame(columns=['Pathogenicity Score','Pathogenicity Label','ID'], index=['ID'])
+			print(f'Note: {input.tada} was empty. Skipping.')
 
-		tada_df['Pathogenicity Score'] = tada_df.apply(lambda row: 1 if (row['Pathogenicity Score'] >= float(params.t_cutoff) and row['Pathogenicity Label'] == 1) else 0, axis=1)
-
-		strv_df['SCORE'] = strv_df.apply(lambda row: 1 if (row.SCORE >= float(params.s_cutoff)) else 0, axis=1)
+		try:
+			strv_df = pd.read_csv(input.strv,sep='\t',usecols=['SCORE', 'ID'],index_col='ID')
+			strv_df['SCORE'] = strv_df.apply(lambda row: 1 if (row.SCORE >= float(params.s_cutoff)) else 0,axis=1)
+		except pandas.errors.EmptyDataError:
+			strv_df = pd.DataFrame(columns=['SCORE', 'ID'], index=['ID'])
+			print(f'Note: {input.strv} was empty. Skipping.')
 
 		df = pd.concat([strv_df,tada_df,cadd_df], axis=1)
 		df.fillna(0, inplace=True)
@@ -271,4 +281,5 @@ rule annotate_sv:
 		bed.to_csv(output.scored_and_annotated, sep='\t', index=False)
 
 onsuccess:
-	shell("rm -rf input/")
+	# rm cadd-sv outputs and softlinks
+	shell("rm -rf input/ beds/ output/; rm annotations models data")
