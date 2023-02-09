@@ -230,7 +230,7 @@ rule combine_scores:
 			print(f'Note: {input.cadd} was empty. Skipping.')
 
 		try:
-			tada_df = pd.read_csv(input.tada, sep='\t', usecols=['Pathogenicity Score','Pathogenicity Label'], index_col='ID')
+			tada_df = pd.read_csv(input.tada, sep='\t', usecols=['Pathogenicity Score','Pathogenicity Label', 'ID'], index_col='ID')
 			tada_df['Pathogenicity Score'] = tada_df.apply(lambda row: 1 if (row['Pathogenicity Score'] >= float(params.t_cutoff) and row['Pathogenicity Label'] == 1) else 0,axis=1)
 		except pandas.errors.EmptyDataError:
 			tada_df = pd.DataFrame(columns=['Pathogenicity Score','Pathogenicity Label','ID']).set_index('ID')
