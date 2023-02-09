@@ -15,3 +15,5 @@ A Snakemake pipeline to predict structural variant pathogenicity and outputs a c
     ```console
     snakemake -s sv_path.smk --printshellcmds --use-envmodules --use-conda
     ```
+## Requests/TO-DO
+- [ ] Kumara suggests we allow bed file as input to filter the input VCF.
