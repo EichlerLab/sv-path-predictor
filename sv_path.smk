@@ -32,11 +32,11 @@ def get_tada(wildcards):
 			outputs.append(f'results/{wildcards.sample}/tada/{sv_key}/Annotated_Predicted_TEST.csv')
 	return outputs
 
-localrules: all, append_cadd_output
+localrules: all, append_cadd_output, clean_up
 
 rule all:
 	input:
-		expand('results/{sample}/{sample}_annotated.bed', sample=manifest_df.index)
+		expand(['results/{sample}/{sample}_annotated.bed', 'cleaned_{sample}.done'], sample=manifest_df.index)
 
 rule convert_vcf:
 	input:
@@ -226,21 +226,21 @@ rule combine_scores:
 			cadd_df['CADDSV-score'] = cadd_df.apply(lambda row: 1 if (row['CADDSV-score'] >= float(params.c_cutoff)) else 0,axis=1)
 			cadd_df = cadd_df[~cadd_df.index.duplicated(keep='first')]
 		except pandas.errors.EmptyDataError:
-			tada_df = pd.DataFrame(columns=['CADDSV-score','ID'], index=['ID'])
+			cadd_df = pd.DataFrame(columns=['CADDSV-score','ID']).set_index('ID')
 			print(f'Note: {input.cadd} was empty. Skipping.')
 
 		try:
-			tada_df = pd.read_csv(input.tada, sep='\t', usecols=['Pathogenicity Score','Pathogenicity Label','ID'], index_col='ID')
+			tada_df = pd.read_csv(input.tada, sep='\t', usecols=['Pathogenicity Score','Pathogenicity Label'], index_col='ID')
 			tada_df['Pathogenicity Score'] = tada_df.apply(lambda row: 1 if (row['Pathogenicity Score'] >= float(params.t_cutoff) and row['Pathogenicity Label'] == 1) else 0,axis=1)
 		except pandas.errors.EmptyDataError:
-			tada_df = pd.DataFrame(columns=['Pathogenicity Score','Pathogenicity Label','ID'], index=['ID'])
+			tada_df = pd.DataFrame(columns=['Pathogenicity Score','Pathogenicity Label','ID']).set_index('ID')
 			print(f'Note: {input.tada} was empty. Skipping.')
 
 		try:
 			strv_df = pd.read_csv(input.strv,sep='\t',usecols=['SCORE', 'ID'],index_col='ID')
 			strv_df['SCORE'] = strv_df.apply(lambda row: 1 if (row.SCORE >= float(params.s_cutoff)) else 0,axis=1)
 		except pandas.errors.EmptyDataError:
-			strv_df = pd.DataFrame(columns=['SCORE', 'ID'], index=['ID'])
+			strv_df = pd.DataFrame(columns=['SCORE', 'ID']).set_index('ID')
 			print(f'Note: {input.strv} was empty. Skipping.')
 
 		df = pd.concat([strv_df,tada_df,cadd_df], axis=1)
@@ -270,16 +270,29 @@ rule annotate_sv:
 		mem = 8,
 		hrs = 24
 	run:
-		anno = pd.read_csv(input.refseq,sep='\t',usecols=['chrom', 'txStart', 'txEnd', 'name2'])
+		anno = pd.read_csv(input.refseq,sep='\t',names=['chrom', 'txStart', 'txEnd', 'name', 'score', 'strand'])
 
 		a=BedTool(input.scored)
-		b=BedTool.from_dataframe(anno.loc[:,('chrom', 'txStart','txEnd','name2')])
+		b=BedTool.from_dataframe(anno)
 
 		hits=a.window(b, w=params.window)
-		bed = hits.groupby(g=[1, 2, 3, 4, 5], c=9, o=['collapse']).to_dataframe(names=['chr','start','end','id','predictor_concordance','refseq'])
+		bed = hits.groupby(g=[1, 2, 3, 4, 5], c=9, o=['collapse']).to_dataframe(names=['chr','start','end','id','predictor_concordance','refseq-exons'])
 
 		bed.to_csv(output.scored_and_annotated, sep='\t', index=False)
 
+rule clean_up:
+	input:
+		requiremnt = rules.annotate_sv.output.scored_and_annotated,
+	output:
+		done = "cleaned_{sample}.done",
+	threads: 1
+	resources:
+		mem = 1,
+		hrs = 24
+	shell:
+		'''
+		rm -rf {wildcards.sample}/ && touch {output.done}
+		'''
 onsuccess:
 	# rm cadd-sv outputs and softlinks
-	shell("rm -rf input/ beds/ output/; rm annotations models data")
+	shell("rm -rf input/ beds/ output/; rm annotations models data; rm *.done")
