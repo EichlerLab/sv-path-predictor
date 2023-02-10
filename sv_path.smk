@@ -276,7 +276,13 @@ rule annotate_sv:
 		b=BedTool.from_dataframe(anno)
 
 		hits=a.window(b, w=params.window)
-		bed = hits.groupby(g=[1, 2, 3, 4, 5], c=9, o=['collapse']).to_dataframe(names=['chr','start','end','id','predictor_concordance','refseq-exons'])
+		target_cols = ['chr','start','end','id','predictor_concordance','refseq-exons']
+		try:
+			assert hits[0] >= 1
+			bed = hits.groupby(g=[1, 2, 3, 4, 5], c=9, o=['collapse']).to_dataframe(names=target_cols)
+		except IndexError:
+			print(f'Note: No intersection happened for {wildcards.sample}, making empty file.')
+			bed = pd.DataFrame(columns=target_cols)
 
 		bed.to_csv(output.scored_and_annotated, sep='\t', index=False)
 
