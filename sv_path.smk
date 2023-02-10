@@ -278,7 +278,7 @@ rule annotate_sv:
 		hits=a.window(b, w=params.window)
 		target_cols = ['chr','start','end','id','predictor_concordance','refseq-exons']
 		try:
-			assert hits[0] >= 1
+			len(hits[0])
 			bed = hits.groupby(g=[1, 2, 3, 4, 5], c=9, o=['collapse']).to_dataframe(names=target_cols)
 		except IndexError:
 			print(f'Note: No intersection happened for {wildcards.sample}, making empty file.')
